@@ -1,0 +1,9 @@
+# Compiled binaries
+*.exe
+/server
+
+# Secrets (your Claude API key will go here later)
+.env
+
+# Editor
+.vscode/
