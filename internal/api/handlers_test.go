@@ -12,7 +12,7 @@ import (
 
 // newTestServer gives each test a fresh store and router.
 func newTestServer() http.Handler {
-	return NewHandler(ticket.NewStore()).Routes()
+	return NewHandler(ticket.NewMemoryStore()).Routes()
 }
 
 // do sends a request through the router and returns the recorded response.

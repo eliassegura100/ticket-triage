@@ -5,15 +5,16 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-
+	"errors"
+	"log"
 	"github.com/eliassegura100/ticket-triage/internal/ticket"
 )
 
 type Handler struct { // Handler struct manages HTTP requests related to tickets
-	store *ticket.Store
+	store ticket.Store
 }
 
-func NewHandler(store *ticket.Store) *Handler { // NewHandler initializes a new Handler instance with the provided ticket store
+func NewHandler(store ticket.Store) *Handler { // NewHandler initializes a new Handler instance with the provided ticket store
 	return &Handler{store: store}
 }
 
@@ -43,16 +44,25 @@ func (h *Handler) createTicket(w http.ResponseWriter, r *http.Request) { // crea
 		return
 	}
 
-	t := h.store.Create(ticket.Ticket{ // create a new Ticket struct with the provided title, description, and reporter
+	t, err := h.store.Create(r.Context(), ticket.Ticket{ // create a new Ticket struct with the provided title, description, and reporter
 		Title:       req.Title,
 		Description: req.Description,
 		Reporter:    req.Reporter,
 	})
+	if err != nil {
+		internalError(w, err) // return a 500 Internal Server Error if there was an error creating the ticket
+		return
+	}
 	writeJSON(w, http.StatusCreated, t)
 }
 
-func (h *Handler) listTickets(w http.ResponseWriter, r *http.Request) { // listTickets handles the retrieval of all tickets
-	writeJSON(w, http.StatusOK, h.store.List())
+func (h *Handler) listTickets(w http.ResponseWriter, r *http.Request) {
+	tickets, err := h.store.List(r.Context())
+	if err != nil {
+		internalError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, tickets)
 }
 
 func (h *Handler) getTicket(w http.ResponseWriter, r *http.Request) { // getTicket handles the retrieval of a specific ticket by its ID
@@ -62,9 +72,13 @@ func (h *Handler) getTicket(w http.ResponseWriter, r *http.Request) { // getTick
 		return
 	}
 
-	t, ok := h.store.Get(id)
-	if !ok {
+	t, err := h.store.Get(r.Context(), id)
+	if errors.Is(err, ticket.ErrNotFound) {
 		writeError(w, http.StatusNotFound, "ticket not found")
+		return
+	}
+	if err != nil {
+		internalError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, t)
@@ -78,4 +92,11 @@ func writeJSON(w http.ResponseWriter, status int, v any) { // writeJSON writes a
 
 func writeError(w http.ResponseWriter, status int, msg string) { // writeError writes a JSON error response with the given status code and error message
 	writeJSON(w, status, map[string]string{"error": msg})
+}
+
+// internalError logs the real error but sends the client a generic message,
+// so database details never leak in API responses.
+func internalError(w http.ResponseWriter, err error) {
+	log.Printf("internal error: %v", err)
+	writeError(w, http.StatusInternalServerError, "internal server error")
 }

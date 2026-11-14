@@ -3,19 +3,21 @@ package ticket
 import (
 	"sync"
 	"time"
+	"context"
 )
 
-type Store struct { // Store struct manages the collection of tickets
+type MemoryStore struct { // MemoryStore struct manages the collection of tickets
 	mu	  sync.RWMutex // mutex to ensure thread-safe access to the tickets map
 	nextID int
 	tickets map[int]Ticket // map to store tickets with their ID as the key
 }
 
-func NewStore() *Store { // NewStore initializes a new Store instance
-	return &Store{ nextID: 1, tickets: make(map[int]Ticket) }
+func NewMemoryStore() *MemoryStore { // NewMemoryStore initializes a new MemoryStore instance
+	return &MemoryStore{ nextID: 1, tickets: make(map[int]Ticket) }
 }
 
-func (s *Store) Create(t Ticket) Ticket { // Create method adds a new ticket to the store
+// Create method adds a new ticket to the store
+func (s *MemoryStore) Create(ctx context.Context, t Ticket) (Ticket, error) {
 	s.mu.Lock() // lock the mutex to ensure exclusive access to the tickets map
 	defer s.mu.Unlock() // defer unlock to ensure the mutex is released after the function completes
 
@@ -24,18 +26,21 @@ func (s *Store) Create(t Ticket) Ticket { // Create method adds a new ticket to 
 	t.Status = StatusOpen
 	t.CreatedAt = time.Now()
 	s.tickets[t.ID] = t
-	return t
+	return t, nil
 }
 
-func (s *Store) Get(id int) (Ticket, bool) { // Get method retrieves a ticket by its ID
-	s.mu.RLock() // read lock to allow concurrent reads
-	defer s.mu.RUnlock() // defer unlock to ensure the mutex is released after the function completes
+func (s *MemoryStore) Get(ctx context.Context, id int) (Ticket, error) { // Get method retrieves a ticket by its ID from the store
+	s.mu.Lock() // lock the mutex to ensure exclusive access to the tickets map
+	defer s.mu.Unlock() // defer unlock to ensure the mutex is released after the function completes
 
 	t, ok := s.tickets[id]
-	return t, ok
+	if !ok {
+		return Ticket{}, ErrNotFound
+	}
+	return t, nil
 }
 
-func (s *Store) List() []Ticket { // List method returns a slice of all tickets in the store
+func (s *MemoryStore) List(ctx context.Context) ([]Ticket, error) { // List method returns a slice of all tickets in the store
 	s.mu.Lock() // lock the mutex to ensure exclusive access to the tickets map
 	defer s.mu.Unlock() // defer unlock to ensure the mutex is released after the function completes
 
@@ -45,5 +50,5 @@ func (s *Store) List() []Ticket { // List method returns a slice of all tickets 
 			out = append(out, t) // append the ticket to the output slice
 		}
 	}
-	return out
+	return out, nil
 }
